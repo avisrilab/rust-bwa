@@ -153,6 +153,10 @@ impl BwaReference {
             add_ref_to_bam_header(header, &contig_name, len);
         }
     }
+
+    pub fn get_contig_names(&self) -> &Vec<String> {
+        &self.contig_names
+    }
 }
 
 impl Drop for BwaReference {
@@ -333,6 +337,10 @@ impl BwaAligner {
         }
 
         records
+    }
+
+    pub fn get_contig_name(&self, index: usize) -> &str {
+        &self.reference.get_contig_names()[index]
     }
 }
 
