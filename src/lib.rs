@@ -322,7 +322,60 @@ impl BwaAligner {
 
         (recs1, recs2)
     }
+    
+    /// Align a single read to the reference.
+    pub fn align_single_read(
+        &self,
+        r1: &[u8],
+        q1: &[u8],
+    ) -> Vec<Record> {
+        let name = CString::new("dnul").unwrap();
+        let raw_name = name.into_raw();
 
+        // Prep input data -- need to make copy of reads since BWA will edit the strings in-place
+        // FIXME - set an id -- used for a random hash
+        let mut r1 = Vec::from(r1);
+        let mut q1 = Vec::from(q1);
+
+        let read1 = bwa_sys::bseq1_t {
+            l_seq: r1.len() as i32,
+            name: raw_name,
+            seq: r1.as_mut_ptr() as *mut i8,
+            qual: q1.as_mut_ptr() as *mut i8,
+            comment: ptr::null_mut(),
+            id: 0,
+            sam: ptr::null_mut(),
+        };
+
+        let mut reads = [read1];
+
+        // Align the read pair. BWA will write the SAM data back to the bwa_sys::bseq1_t.sam field
+        unsafe {
+            let r = *(self.reference.bwt_data);
+            let settings = self.settings.bwa_settings;
+            bwa_sys::mem_process_seq_pe(
+                &settings,
+                r.bwt,
+                r.bns,
+                r.pac,
+                reads.as_mut_ptr(),
+                self.pe_stats.inner.as_ptr(),
+            );
+            let _ = CString::from_raw(raw_name);
+        }
+
+        // Parse the results from the SAM output & convert the htslib Records
+        let sam1 = unsafe { CStr::from_ptr(reads[0].sam) };
+        let recs1 = self.parse_sam_to_records(sam1.to_bytes());
+
+        unsafe {
+            libc::free(reads[0].sam as *mut libc::c_void);
+        }
+
+        recs1
+    }
+
+    
     fn parse_sam_to_records(&self, sam: &[u8]) -> Vec<Record> {
         let mut records = Vec::new();
 
